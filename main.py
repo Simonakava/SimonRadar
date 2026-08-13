@@ -5,20 +5,24 @@ from database.db import (
     save_scan_results,
     open_paper_trades,
     update_paper_trades,
+    get_open_paper_trades_with_current_price,
     get_paper_trading_stats
 )
 
 
 MAX_RESULTS = 15
 
+TREND_LABELS = {
+    "hausse": "📈 hausse",
+    "baisse": "📉 baisse",
+    "stagne": "➖ stagne",
+    "inconnu": "❓ inconnu"
+}
 
-def print_signal(
-    result,
-    position
-):
+
+def print_signal(result, position):
 
     plan = result["trade_plan"]
-
     classification = result["classification"]
 
     labels = {
@@ -28,10 +32,7 @@ def print_signal(
         "WEAK": "⚪ FAIBLE"
     }
 
-    label = labels.get(
-        classification,
-        ""
-    )
+    label = labels.get(classification, "")
 
     print(
         f"{position}. "
@@ -58,12 +59,50 @@ def print_signal(
     print()
 
 
+def print_open_positions():
+
+    positions = get_open_paper_trades_with_current_price()
+
+    print("=" * 70)
+    print("📡 POSITIONS FICTIVES EN COURS (max 24h)")
+    print("=" * 70)
+    print()
+
+    if not positions:
+        print("Aucune position fictive en cours.")
+        print()
+        return
+
+    for p in positions:
+
+        trend_label = TREND_LABELS.get(p["trend"], p["trend"])
+
+        print(
+            f"{p['symbol']} — {p['classification']} "
+            f"(score {p['score']}) — {trend_label}"
+        )
+
+        print(f"   Entrée        : {p['entry_price']:.8f}")
+
+        if p["current_price"] is not None:
+            print(f"   Prix actuel   : {p['current_price']:.8f}")
+            print(f"   Évolution     : {p['change_percent']:+.2f}%")
+        else:
+            print("   Prix actuel   : indisponible")
+
+        print(f"   Stop-loss     : {p['stop_loss']:.8f}")
+        print(f"   TP1           : {p['take_profit_1']:.8f}")
+        print(f"   TP2           : {p['take_profit_2']:.8f}")
+        print(f"   Temps écoulé  : {p['elapsed_hours']:.1f}h / 24h")
+        print()
+
+
 def print_paper_trading_stats():
 
     stats = get_paper_trading_stats()
 
     print("=" * 70)
-    print("📊 PAPER TRADING — PERFORMANCE SUR SIGNAUX RÉELS (24H MAX)")
+    print("📊 PAPER TRADING — PERFORMANCE SUR SIGNAUX CLÔTURÉS (24H MAX)")
     print("=" * 70)
     print()
 
@@ -88,17 +127,8 @@ def main():
 
     save_scan_results(results)
 
-    # =====================================================
-    # PAPER TRADING — clôture les positions échues,
-    # puis ouvre de nouvelles positions sur les signaux du jour
-    # =====================================================
-
     update_paper_trades()
     open_paper_trades(results)
-
-    # =====================================================
-    # CATÉGORIES
-    # =====================================================
 
     entries = [r for r in results if r["classification"] == "ENTRY"]
     strong = [r for r in results if r["classification"] == "STRONG"]
@@ -156,6 +186,7 @@ def main():
 
     print()
 
+    print_open_positions()
     print_paper_trading_stats()
 
     elapsed = (datetime.now() - start).total_seconds()

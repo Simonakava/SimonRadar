@@ -1,3 +1,4 @@
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from data.markets import get_eur_markets
@@ -24,13 +25,6 @@ OHLCV_LIMIT = 100
 
 # -----------------------------------------------------
 # SEUILS VALIDÉS PAR BACKTEST (backtest/validation.py)
-# Basés sur le SCORE BRUT (calculate_score), testés sur
-# 341 trades hors échantillon :
-#   score >= 70 -> PF 1.92, 93 trades, +37% cumulé
-#   score >= 80 -> PF 2.48, 49 trades
-#   score >= 85 -> PF 2.77, 34 trades (échantillon plus fragile)
-# À re-valider périodiquement en relançant le backtest
-# avec plus d'historique.
 # -----------------------------------------------------
 
 ENTRY_SCORE_THRESHOLD = 85
@@ -39,6 +33,11 @@ WATCH_SCORE_THRESHOLD = 70
 
 MAX_RISK_ENTRY = 3.0
 MAX_RISK_STRONG = 4.0
+
+# Terminal interactif (local) -> barre de progression \r
+# Non-interactif (GitHub Actions, logs) -> paliers seulement
+IS_INTERACTIVE = sys.stdout.isatty()
+PROGRESS_STEP = 50  # affichage tous les 50 marchés en mode non-interactif
 
 
 # =========================================================
@@ -116,11 +115,6 @@ def analyze_symbol(symbol):
             score * 0.65
             + quality * 0.35
         )
-
-        # -------------------------------------------------
-        # CLASSIFICATION — basée sur le score brut validé
-        # par backtest, pas sur le combined_score.
-        # -------------------------------------------------
 
         if (
             score >= ENTRY_SCORE_THRESHOLD
@@ -207,11 +201,25 @@ def scan_market():
 
             percentage = completed / total * 100 if total else 100
 
-            print(
-                f"\rAnalyse : {completed}/{total} ({percentage:.1f}%)",
-                end="",
-                flush=True
-            )
+            if IS_INTERACTIVE:
+
+                # Terminal local : barre de progression qui s'écrase
+                print(
+                    f"\rAnalyse : {completed}/{total} ({percentage:.1f}%)",
+                    end="",
+                    flush=True
+                )
+
+            else:
+
+                # CI / logs non-interactifs : uniquement par paliers
+                if (
+                    completed % PROGRESS_STEP == 0
+                    or completed == total
+                ):
+                    print(
+                        f"Analyse : {completed}/{total} ({percentage:.1f}%)"
+                    )
 
     print()
     print()
